@@ -41,11 +41,14 @@ extern void read_report_usage(void);
 extern int read_report_main(int argc, char* argv[]);
 extern void reg_access_usage(void);
 extern int reg_access_main(int argc, char* argv[]);
+extern void backdoor_access_usage(void);
+extern int backdoor_access_main(int argc, char* argv[]);
 
 enum tool {
 	FW_UPDATE = 1,
 	READ_REPORT = 2,
 	REG_ACCESS = 3,
+	BACKDOOR_ACCESS = 81,
 };
 
 static void error_exit(error_code)
@@ -115,6 +118,9 @@ static void print_tool_usage(int tool)
 	case REG_ACCESS:
 		reg_access_usage();
 		break;
+	case BACKDOOR_ACCESS:
+		backdoor_access_usage();
+		break;
 	}
 
 	return;
@@ -131,6 +137,9 @@ static void run_tool(int tool, int count)
 		break;
 	case REG_ACCESS:
 		reg_access_main(count, arg);
+		break;
+	case BACKDOOR_ACCESS:
+		backdoor_access_main(count, arg);
 		break;
 	}
 
@@ -170,6 +179,8 @@ int main(int argc, char* argv[])
 			tool = READ_REPORT;
 		} else if (strcmp(argv[1], "reg_access") == 0) {
 			tool = REG_ACCESS;
+		} else if (strcmp(argv[1], "backdoor_access") == 0) {
+			tool = BACKDOOR_ACCESS;
 		} else {
 			printf("ERROR: invalid tool name\n");
 			error_exit(EINVAL);
@@ -201,6 +212,12 @@ int main(int argc, char* argv[])
 	case '3':
 		tool = stdin_input[0] - '0';
 		break;
+	case '*':
+		get_line();
+		if ((stdin_input[0] == '8') && (stdin_input[1] == '1')) {
+			tool = BACKDOOR_ACCESS;
+			break;
+		}
 	default:
 		printf("ERROR: invalid input\n");
 		error_exit(EINVAL);
