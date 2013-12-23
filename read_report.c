@@ -26,7 +26,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#define VERSION "1.8"
+#define VERSION "1.9"
 
 #define SYNA_TOOL_BOX
 
@@ -35,7 +35,7 @@
 
 #define MAX_STRING_LEN 256
 #define MAX_INT_LEN 33
-#define PATIENCE 10000
+#define PATIENCE 3000
 
 #define DATA_FILENAME "f54/report_data"
 #define DO_PREPARATION_FILENAME "f54/do_preparation"
@@ -51,6 +51,10 @@
 
 char mySensor[MAX_STRING_LEN];
 char input_detect[MAX_STRING_LEN];
+
+#define STATUS_IDLE 0
+#define STATUS_BUSY 1
+#define STATUS_ERROR 2
 
 unsigned char *data_buffer;
 
@@ -77,7 +81,6 @@ enum report_types {
 	F54_TREX_SHORTS = 26,
 	F54_ABS_CAP = 38,
 	F54_ABS_DELTA = 40,
-	F54_ABS_ADC = 42,
 	INVALID_REPORT_TYPE = -1,
 };
 
@@ -345,7 +348,7 @@ int main(int argc, char* argv[])
 	char *report_data_8;
 	short *report_data_16;
 	int *report_data_32;
-	unsigned char data_8;
+	unsigned int *report_data_u32;
 	struct stat st;
 
 #ifndef SYNA_TOOL_BOX
@@ -408,8 +411,9 @@ int main(int argc, char* argv[])
 		SetReportType(report_type);
 		GetReport(1);
 		do {
-			if (GetStatus() == 0)
+			if (GetStatus() != STATUS_BUSY)
 				break;
+			usleep(1000);
 		} while (--patience > 0);
 
 		report_size = ReadReportSize();
@@ -444,6 +448,7 @@ int main(int argc, char* argv[])
 		case F54_TRUE_BASELINE:
 		case F54_FULL_RAW_CAP:
 		case F54_FULL_RAW_CAP_RX_COUPLING_COMP:
+		case F54_SENSOR_SPEED:
 			report_data_16 = (short *)data_buffer;
 			if (cartesian) {
 				printf("   ");
@@ -468,8 +473,6 @@ int main(int argc, char* argv[])
 			break;
 		case F54_HIGH_RESISTANCE:
 		case F54_FULL_RAW_CAP_MIN_MAX:
-		case F54_SENSOR_SPEED:
-		case F54_ADC_RANGE:
 			report_data_16 = (short *)data_buffer;
 			for (ii = 0; ii < report_size; ii += 2) {
 				printf("%03d: %d\r\n", ii / 2, *report_data_16);
@@ -477,6 +480,38 @@ int main(int argc, char* argv[])
 			}
 			break;
 		case F54_ABS_CAP:
+			report_data_u32 = (unsigned int *)data_buffer;
+			if (cartesian) {
+				printf("Rx ");
+				for (ii = 0; ii < rx_num; ii++)
+					printf("     %2d", ii);
+				printf("\r\n");
+
+				printf("   ");
+				for (ii = 0; ii < rx_num; ii++) {
+					printf("  %5u", *report_data_u32);
+					report_data_u32++;
+				}
+				printf("\r\n");
+
+				printf("Tx ");
+				for (ii = 0; ii < tx_num; ii++)
+					printf("     %2d", ii);
+				printf("\r\n");
+
+				printf("   ");
+				for (ii = 0; ii < tx_num; ii++) {
+					printf("  %5u", *report_data_u32);
+					report_data_u32++;
+				}
+				printf("\r\n");
+			} else {
+				for (ii = 0; ii < report_size; ii += 4) {
+					printf("%03d: %u\r\n", ii / 4, *report_data_u32);
+					report_data_u32++;
+				}
+			}
+			break;
 		case F54_ABS_DELTA:
 			report_data_32 = (int *)data_buffer;
 			if (cartesian) {
@@ -508,14 +543,6 @@ int main(int argc, char* argv[])
 					printf("%03d: %d\r\n", ii / 4, *report_data_32);
 					report_data_32++;
 				}
-			}
-			break;
-		case F54_ABS_ADC:
-			report_data_16 = (short *)data_buffer;
-			for (ii = 0; ii < report_size; ii += 2) {
-				data_8 = (unsigned char)*report_data_16;
-				printf("%03d: %d\r\n", ii / 2, data_8);
-				report_data_16++;
 			}
 			break;
 		default:
