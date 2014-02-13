@@ -17,6 +17,7 @@ Run SynaToolbox
   SynaToolbox fw_update [parameters...]
   SynaToolbox read_report [parameters...]
   SynaToolbox reg_access [parameters...]
+  SynaToolbox data_logger [parameters...]
 
 
 
@@ -91,4 +92,20 @@ Usage examples
    -a 0x048a -l 5 -r
 - Write 0x11 0x22 0x33 to address 0x048a starting with 0x11
    -a 0x048a -d 0x112233 -w
-   
+
+
+
+Data Logger Tool Parameters and Usage
+-------------------------------------
+Parameters
+[-a {address in hex}] - Start address (16-bit) for data logging
+[-l {length to read}] - Length in bytes to read for each interrupt instance
+[-m {interrupt mask}] - Interrupt status bit(s) to log data for
+[-t {time duration}] - Amount of time in seconds to log data for
+
+Usage example
+- Read seven bytes of data starting from address 0x0006 for each 0x04 interrupt for 10 seconds
+   -a 0x0006 -l 7 -m 0x04 -t 10
+
+Logged data stored in /data/data_logger_output.txt.
+Multiple interrupt status bits may be OR'ed together to form interrupt mask.

@@ -22,7 +22,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 #define INPUT_PATH "/sys/class/input/input"
 #define NUMBER_OF_INPUTS_TO_SCAN 20
@@ -43,15 +43,15 @@ extern void reg_access_usage(void);
 extern int reg_access_main(int argc, char* argv[]);
 extern void backdoor_access_usage(void);
 extern int backdoor_access_main(int argc, char* argv[]);
-extern void db_logger_usage(void);
-extern int db_logger_main(int argc, char* argv[]);
+extern void data_logger_usage(void);
+extern int data_logger_main(int argc, char* argv[]);
 
 enum tool {
 	FW_UPDATE = 0x01,
 	READ_REPORT = 0x02,
 	REG_ACCESS = 0x03,
+	DATA_LOGGER = 0x04,
 	BACKDOOR_ACCESS = 0x81,
-	DB_LOGGER = 0xdb,
 };
 
 static void error_exit(error_code)
@@ -67,6 +67,7 @@ static void usage(void)
 	printf("1 - Update firmware\n");
 	printf("2 - Read test reports\n");
 	printf("3 - Access registers\n");
+	printf("4 - Log register data\n");
 	printf("Enter tool selection: ");
 
 	return;
@@ -121,11 +122,11 @@ static void print_tool_usage(int tool)
 	case REG_ACCESS:
 		reg_access_usage();
 		break;
+	case DATA_LOGGER:
+		data_logger_usage();
+		break;
 	case BACKDOOR_ACCESS:
 		backdoor_access_usage();
-		break;
-	case DB_LOGGER:
-		db_logger_usage();
 		break;
 	}
 
@@ -144,11 +145,11 @@ static void run_tool(int tool, int count)
 	case REG_ACCESS:
 		reg_access_main(count, arg);
 		break;
+	case DATA_LOGGER:
+		data_logger_main(count, arg);
+		break;
 	case BACKDOOR_ACCESS:
 		backdoor_access_main(count, arg);
-		break;
-	case DB_LOGGER:
-		db_logger_main(count, arg);
 		break;
 	}
 
@@ -190,8 +191,8 @@ int main(int argc, char* argv[])
 			tool = REG_ACCESS;
 		} else if (strcmp(argv[1], "backdoor_access") == 0) {
 			tool = BACKDOOR_ACCESS;
-		} else if (strcmp(argv[1], "db_logger") == 0) {
-			tool = DB_LOGGER;
+		} else if (strcmp(argv[1], "data_logger") == 0) {
+			tool = DATA_LOGGER;
 		} else {
 			printf("ERROR: invalid tool name\n");
 			error_exit(EINVAL);
@@ -221,16 +222,13 @@ int main(int argc, char* argv[])
 	case '1':
 	case '2':
 	case '3':
+	case '4':
 		tool = stdin_input[0] - '0';
 		break;
 	case '*':
 		get_line();
 		if ((stdin_input[0] == '8') && (stdin_input[1] == '1')) {
 			tool = BACKDOOR_ACCESS;
-			break;
-		}
-		if ((stdin_input[0] == 'd') && (stdin_input[1] == 'b')) {
-			tool = DB_LOGGER;
 			break;
 		}
 	default:
