@@ -14,13 +14,12 @@ Run SynaToolbox
 ---------------
 - Option 1: execute SynaToolbox to bring up menu selection for choosing tool to use.
   For RAM backdoor access, first enter '*' then enter '81'.
-  For DB logger, first enter '*' then enter 'db'.
 - Option 2: run SynaToolbox as single-line command as follows.
   SynaToolbox fw_update [parameters...]
   SynaToolbox read_report [parameters...]
   SynaToolbox reg_access [parameters...]
+  SynaToolbox data_logger [parameters...]
   SynaToolbox backdoor_access [parameters...]
-  SynaToolbox db_logger [parameters...]
 
 
 
@@ -98,6 +97,23 @@ Usage examples
 
 
 
+Data Logger Tool Parameters and Usage
+-------------------------------------
+Parameters
+[-a {address in hex}] - Start address (16-bit) for data logging
+[-l {length to read}] - Length in bytes to read for each interrupt instance
+[-m {interrupt mask}] - Interrupt status bit(s) to log data for
+[-t {time duration}] - Amount of time in seconds to log data for
+
+Usage example
+- Read seven bytes of data starting from address 0x0006 for each 0x04 interrupt for 10 seconds
+   -a 0x0006 -l 7 -m 0x04 -t 10
+
+Logged data stored in /data/data_logger_output.txt.
+Multiple interrupt status bits may be OR'ed together to form interrupt mask.
+
+
+
 RAM Backdoor Access Tool Parameters and Usage
 ---------------------------------------------
 Parameters
@@ -117,18 +133,3 @@ Usage examples
 - Write 0x55aa to word address 0x01c0 using XOR when offset of F81_RMI_DATA2
   register from F81 data register base address is 2
    -a 0x01c0 -d 0x55aa -w -x -o 2
-
-
-
-DB Logger Tool Parameters and Usage
------------------------------------
-Parameters
-[-a {address in hex}] - Start address (16-bit) for data logging
-[-l {length to read}] - Length in bytes to read for each FDB interrupt instance
-[-t {time duration}] - Amount of time in seconds to log data for
-
-Usage example
-- Read eight bytes of data starting from address 0x0500 for 10 seconds
-   -a 0x0500 -l 8 -t 10
-
-Logged data stored in /data/db_output.txt.

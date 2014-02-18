@@ -27,7 +27,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 
 #define SYNA_TOOL_BOX
 
@@ -36,14 +36,11 @@
 
 #define MAX_FRAME_RATE 120
 
-#define PID_FILENAME "rmidb/pid"
-#define TERM_FILENAME "rmidb/term"
-#define QUERY_BASE_FILENAME "rmidb/query_base_addr"
-#define CONTROL_BASE_FILENAME "rmidb/control_base_addr"
-#define DATA_BASE_FILENAME "rmidb/data_base_addr"
-#define COMMAND_BASE_FILENAME "rmidb/command_base_addr"
+#define PID_FILENAME "rmidev/pid"
+#define TERM_FILENAME "rmidev/term"
 #define DATA_FILENAME "rmidev/data"
-#define OUTPUT_FILENAME "/data/db_output.txt"
+#define INTR_MASK_FILENAME "rmidev/intr_mask"
+#define OUTPUT_FILENAME "/data/data_logger_output.txt"
 #define DETECT_FILENAME "buildid"
 
 #define MAX_STRING_LEN 256
@@ -52,41 +49,31 @@
 char mySensor[MAX_STRING_LEN];
 char input_detect[MAX_STRING_LEN];
 
-char rmidb_pid[MAX_STRING_LEN];
-char rmidb_term[MAX_STRING_LEN];
-char rmidb_query_base[MAX_STRING_LEN];
-char rmidb_control_base[MAX_STRING_LEN];
-char rmidb_data_base[MAX_STRING_LEN];
-char rmidb_command_base[MAX_STRING_LEN];
-char rmidb_data[MAX_STRING_LEN];
-char rmidb_output[MAX_STRING_LEN];
+char rmidev_pid[MAX_STRING_LEN];
+char rmidev_term[MAX_STRING_LEN];
+char rmidev_data[MAX_STRING_LEN];
+char rmidev_intr_mask[MAX_STRING_LEN];
+char rmidev_output[MAX_STRING_LEN];
 
+unsigned char intr_mask = 0;
 unsigned short r_address = 0;
 unsigned char *r_data;
 unsigned int r_data_size;
 unsigned int r_length = 0;
 unsigned int r_duration = 0;
 unsigned int r_index = 0;
-unsigned int query_base;
-unsigned int control_base;
-unsigned int data_base;
-unsigned int command_base;
 
 int fd_pid;
 int fd_term;
-int fd_query_base;
-int fd_control_base;
-int fd_data_base;
-int fd_command_base;
 int fd_data;
+int fd_intr_mask;
 FILE *fp_output;
 
-static void read_value_from_fd(int fd, unsigned int *value);
 static void write_value_to_fd(int fd, unsigned int value);
 
-void db_logger_usage(void)
+void data_logger_usage(void)
 {
-	printf("\t[-a {start address}] [-l {length to read}] [-t {time duration}]\n");
+	printf("\t[-a {start address}] [-l {length to read}] [-m {interrupt mask}] [-t {time duration}]\n");
 
 	return;
 }
@@ -94,7 +81,7 @@ void db_logger_usage(void)
 static void usage(char *name)
 {
 	printf("Version %s\n", VERSION);
-	printf("Usage: %s [-a {start address}] [-l {length to read}] [-t {time duration}]\n", name);
+	printf("Usage: %s [-a {start address}] [-l {length to read}] [-m {interrupt mask}] [-t {time duration}]\n", name);
 
 	return;
 }
@@ -103,77 +90,49 @@ static void close_all_fds(void)
 {
 	write_value_to_fd(fd_pid, 0);
 
+	write_value_to_fd(fd_intr_mask, 0);
+
 	if (fd_pid)
 		close(fd_pid);
 
 	if (fd_term)
 		close(fd_term);
 
-	if (fd_query_base)
-		close(fd_query_base);
-
-	if (fd_control_base)
-		close(fd_control_base);
-
-	if (fd_data_base)
-		close(fd_data_base);
-
-	if (fd_command_base)
-		close(fd_command_base);
-
 	if (fd_data)
 		close(fd_data);
+
+	if (fd_intr_mask)
+		close(fd_intr_mask);
 
 	return;
 }
 
 static void open_all_fds(void)
 {
-	fd_pid = open(rmidb_pid, O_WRONLY);
+	fd_pid = open(rmidev_pid, O_WRONLY);
 	if (fd_pid < 0) {
-		printf("error: failed to open %s\n", rmidb_pid);
+		printf("error: failed to open %s\n", rmidev_pid);
 		close_all_fds();
 		exit(EIO);
 	}
 
-	fd_term = open(rmidb_term, O_WRONLY);
+	fd_term = open(rmidev_term, O_WRONLY);
 	if (fd_term < 0) {
-		printf("error: failed to open %s\n", rmidb_term);
+		printf("error: failed to open %s\n", rmidev_term);
 		close_all_fds();
 		exit(EIO);
 	}
 
-	fd_query_base = open(rmidb_query_base, O_RDONLY);
-	if (fd_query_base < 0) {
-		printf("error: failed to open %s\n", rmidb_query_base);
-		close_all_fds();
-		exit(EIO);
-	}
-
-	fd_control_base = open(rmidb_control_base, O_RDONLY);
-	if (fd_control_base < 0) {
-		printf("error: failed to open %s\n", rmidb_control_base);
-		close_all_fds();
-		exit(EIO);
-	}
-
-	fd_data_base = open(rmidb_data_base, O_RDONLY);
-	if (fd_data_base < 0) {
-		printf("error: failed to open %s\n", rmidb_data_base);
-		close_all_fds();
-		exit(EIO);
-	}
-
-	fd_command_base = open(rmidb_command_base, O_RDONLY);
-	if (fd_command_base < 0) {
-		printf("error: failed to open %s\n", rmidb_command_base);
-		close_all_fds();
-		exit(EIO);
-	}
-
-	fd_data = open(rmidb_data, O_RDWR);
+	fd_data = open(rmidev_data, O_RDWR);
 	if (fd_data < 0) {
-		printf("error: failed to open %s\n", rmidb_data);
+		printf("error: failed to open %s\n", rmidev_data);
+		close_all_fds();
+		exit(EIO);
+	}
+
+	fd_intr_mask = open(rmidev_intr_mask, O_WRONLY);
+	if (fd_intr_mask < 0) {
+		printf("error: failed to open %s\n", rmidev_intr_mask);
 		close_all_fds();
 		exit(EIO);
 	}
@@ -187,22 +146,6 @@ static void error_exit(error_code)
 	if (r_data)
 		free(r_data);
 	exit(error_code);
-
-	return;
-}
-
-static void read_value_from_fd(int fd, unsigned int *value)
-{
-	int retval;
-	char buf[MAX_BUFFER_LEN] = {0};
-
-	retval = read(fd, buf, MAX_BUFFER_LEN - 1);
-	if (retval == -1) {
-		printf("error: failed to read from file descriptor\n");
-		error_exit(EIO);
-	}
-
-	*value = strtoul(buf, NULL, 0);
 
 	return;
 }
@@ -240,31 +183,19 @@ static int check_files(void)
 {
 	int retval;
 
-	retval = check_one_file(rmidb_pid);
+	retval = check_one_file(rmidev_pid);
 	if (retval)
 		return retval;
 
-	retval = check_one_file(rmidb_term);
+	retval = check_one_file(rmidev_term);
 	if (retval)
 		return retval;
 
-	retval = check_one_file(rmidb_query_base);
+	retval = check_one_file(rmidev_data);
 	if (retval)
 		return retval;
 
-	retval = check_one_file(rmidb_control_base);
-	if (retval)
-		return retval;
-
-	retval = check_one_file(rmidb_data_base);
-	if (retval)
-		return retval;
-
-	retval = check_one_file(rmidb_command_base);
-	if (retval)
-		return retval;
-
-	retval = check_one_file(rmidb_data);
+	retval = check_one_file(rmidev_intr_mask);
 	if (retval)
 		return retval;
 
@@ -305,6 +236,8 @@ void terminate_handler(int signum)
 
 	write_value_to_fd(fd_pid, 0);
 
+	write_value_to_fd(fd_intr_mask, 0);
+
 	buffer_size = 7 + (5 * r_length) + 2 + 1;
 
 	snprintf_buf = malloc(buffer_size);
@@ -315,9 +248,9 @@ void terminate_handler(int signum)
 		memset(snprintf_buf, 0x00, buffer_size);
 	}
 
-	fp_output = fopen(rmidb_output, "w");
+	fp_output = fopen(rmidev_output, "w");
 	if (!fp_output) {
-		printf("error: failed to open %s\n", rmidb_output);
+		printf("error: failed to open %s\n", rmidev_output);
 		free(snprintf_buf);
 		error_exit(EIO);
 	}
@@ -361,7 +294,7 @@ void terminate_handler(int signum)
 }
 
 #ifdef SYNA_TOOL_BOX
-int db_logger_main(int argc, char* argv[])
+int data_logger_main(int argc, char* argv[])
 #else
 int main(int argc, char* argv[])
 #endif
@@ -414,13 +347,17 @@ int main(int argc, char* argv[])
 			this_arg++;
 			temp = strtoul(argv[this_arg], NULL, 0);
 			r_length = (unsigned int)temp;
+		} else if (!strcmp((const char *)argv[this_arg], "-m")) {
+			this_arg++;
+			temp = strtoul(argv[this_arg], NULL, 0);
+			intr_mask = (unsigned char)temp;
 		} else if (!strcmp((const char *)argv[this_arg], "-t")) {
 			this_arg++;
 			temp = strtoul(argv[this_arg], NULL, 0);
 			r_duration = (unsigned int)temp;
 		} else {
 #ifdef SYNA_TOOL_BOX
-			db_logger_usage();
+			data_logger_usage();
 #else
 			usage(argv[0]);
 #endif
@@ -432,7 +369,7 @@ int main(int argc, char* argv[])
 
 	if (!r_length || !r_duration) {
 #ifdef SYNA_TOOL_BOX
-		db_logger_usage();
+		data_logger_usage();
 #else
 		usage(argv[0]);
 #endif
@@ -451,14 +388,11 @@ int main(int argc, char* argv[])
 	terminate_signal.sa_flags = 0;
 	sigaction(SIGTERM, &terminate_signal, NULL);
 
-	snprintf(rmidb_pid, MAX_STRING_LEN, "%s/%s", mySensor, PID_FILENAME);
-	snprintf(rmidb_term, MAX_STRING_LEN, "%s/%s", mySensor, TERM_FILENAME);
-	snprintf(rmidb_query_base, MAX_STRING_LEN, "%s/%s", mySensor, QUERY_BASE_FILENAME);
-	snprintf(rmidb_control_base, MAX_STRING_LEN, "%s/%s", mySensor, CONTROL_BASE_FILENAME);
-	snprintf(rmidb_data_base, MAX_STRING_LEN, "%s/%s", mySensor, DATA_BASE_FILENAME);
-	snprintf(rmidb_command_base, MAX_STRING_LEN, "%s/%s", mySensor, COMMAND_BASE_FILENAME);
-	snprintf(rmidb_data, MAX_STRING_LEN, "%s/%s", mySensor, DATA_FILENAME);
-	snprintf(rmidb_output, MAX_STRING_LEN, "%s", OUTPUT_FILENAME);
+	snprintf(rmidev_pid, MAX_STRING_LEN, "%s/%s", mySensor, PID_FILENAME);
+	snprintf(rmidev_term, MAX_STRING_LEN, "%s/%s", mySensor, TERM_FILENAME);
+	snprintf(rmidev_data, MAX_STRING_LEN, "%s/%s", mySensor, DATA_FILENAME);
+	snprintf(rmidev_intr_mask, MAX_STRING_LEN, "%s/%s", mySensor, INTR_MASK_FILENAME);
+	snprintf(rmidev_output, MAX_STRING_LEN, "%s", OUTPUT_FILENAME);
 
 	if (check_files())
 		exit(ENODEV);
@@ -473,14 +407,11 @@ int main(int argc, char* argv[])
 		exit(ENOMEM);
 	}
 
-	read_value_from_fd(fd_query_base, &query_base);
-	read_value_from_fd(fd_control_base, &control_base);
-	read_value_from_fd(fd_data_base, &data_base);
-	read_value_from_fd(fd_command_base, &command_base);
-
 	lseek(fd_data, 0, SEEK_SET);
 
 	write_value_to_fd(fd_pid, pid);
+
+	write_value_to_fd(fd_intr_mask, intr_mask);
 
 	printf("Data logging started\n");
 
