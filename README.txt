@@ -26,6 +26,7 @@ Firmware Update Tool Parameters and Usage
 Parameters
 [-b {image_file}] - Name of image file
 [-ld] - Do lockdown
+[-gc] - Write guest code
 [-r] - Read config area
 [-ui] - UI config area
 [-pm] - Permanent config area
@@ -41,10 +42,10 @@ Usage examples
    -b PR1234567.img -ld
 - Perform reflash using PR1234567.img regardless of PR number of FW on device
    -b PR1234567.img -f
-- Write config data from PR1234567.img (parsing config data from FW image file)
+- Write config data from PR1234567.img (parsing config data from image file)
    -b PR1234567.img -ui
-- Write permanent config area from pmconfig.img (binary file containing permanent config data)
-   -b pmconfig.img -pm
+- Write guest code from PR1234567.img (parsing guest code data from image file)
+   -b PR1234567.img -gc
 - Read UI config area
    -r -ui
 - Read permanent config area

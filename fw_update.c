@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 
 #define SYNA_TOOL_BOX
 
@@ -49,6 +49,7 @@
 #define IMAGEBLOCKCOUNT_FILENAME "fwblockcount"
 #define CONFIGBLOCKCOUNT_FILENAME "configblockcount"
 #define PMCONFIGBLOCKCOUNT_FILENAME "permconfigblockcount"
+#define GUESTCODE_FILENAME "writeguestcode"
 #define BUILDID_FILENAME "buildid"
 #define FLASHPROG_FILENAME "flashprog"
 #define DETECT_FILENAME "buildid"
@@ -71,6 +72,7 @@ int uiConfig = 0;
 int pmConfig = 0;
 int blConfig = 0;
 int dpConfig = 0;
+int guestCode = 0;
 int force = 0;
 int verbose = 0;
 
@@ -86,9 +88,10 @@ enum update_mode {
 
 void fw_update_usage(void)
 {
-	printf("\t[-b {image_file}] [-ld] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n");
+	printf("\t[-b {image_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n");
 	printf("\t[-b {image_file}] - Name of image file\n");
 	printf("\t[-ld] - Do lockdown\n");
+	printf("\t[-gc] - Write guest code\n");
 	printf("\t[-r] - Read config area\n");
 	printf("\t[-ui] - UI config area\n");
 	printf("\t[-pm] - Permanent config area\n");
@@ -103,9 +106,10 @@ void fw_update_usage(void)
 static void usage(char *name)
 {
 	printf("Version %s\n", VERSION);
-	printf("Usage: %s [-b {image_file}] [-ld] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n", name);
+	printf("Usage: %s [-b {image_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n", name);
 	printf("\t[-b {image_file}] - Name of image file\n");
 	printf("\t[-ld] - Do lockdown\n");
+	printf("\t[-gc] - Write guest code\n");
 	printf("\t[-r] - Read config area\n");
 	printf("\t[-ui] - UI config area\n");
 	printf("\t[-pm] - Permanent config area\n");
@@ -393,6 +397,17 @@ static int ReadPmConfigBlockCount(void)
 	return configBlockCount;
 }
 
+static void StartWriteGuestCode(int value)
+{
+	char tmpfname[MAX_STRING_LEN];
+
+	snprintf(tmpfname, MAX_STRING_LEN, "%s/%s", mySensor, GUESTCODE_FILENAME);
+
+	WriteValueToSysfsFile(tmpfname, value);
+
+	return;
+}
+
 static int ReadBuildID(void)
 {
 	unsigned int buildID;
@@ -607,6 +622,19 @@ static void DoWriteConfig(void)
 	return;
 }
 
+static void DoWriteGuestCode(void)
+{
+	printf("Starting guest code update...\n");
+
+	SetImageSize(fileSize);
+	WriteBinaryData((char *)&image_buf[0], fileSize);
+	StartWriteGuestCode(1);
+
+	printf("Guest code update finished...\n");
+
+	return;
+}
+
 static void DoReflash(void)
 {
 	int update_mode = NORMAL;
@@ -754,6 +782,8 @@ int main(int argc, char* argv[])
 			blConfig = 1;
 		} else if (!strcmp((const char *)argv[this_arg], "-dp")) {
 			dpConfig = 1;
+		} else if (!strcmp((const char *)argv[this_arg], "-gc")) {
+			guestCode = 1;
 		} else if (!strcmp((const char *)argv[this_arg], "-f")) {
 			force = 1;
 		} else if (!strcmp((const char *)argv[this_arg], "-v")) {
@@ -770,13 +800,18 @@ int main(int argc, char* argv[])
 		this_arg++;
 	}
 
-	if ((uiConfig + pmConfig + blConfig + dpConfig) > 1) {
+	if ((uiConfig + pmConfig + blConfig + dpConfig + guestCode) > 1) {
 		printf("ERROR: too many parameters\n");
 		error_exit(EINVAL);
 	}
 
 	if (uiConfig || pmConfig || blConfig || dpConfig)
 		writeConfig = 1;
+
+	if (readConfig && guestCode) {
+		printf("ERROR: reading of guest code not supported\n");
+		error_exit(EINVAL);
+	}
 
 	if (!readConfig && !strlen(imageFileName)) {
 		printf("ERROR: no image file specified\n");
@@ -799,6 +834,8 @@ int main(int argc, char* argv[])
 		DoReadConfig();
 	else if (writeConfig)
 		DoWriteConfig();
+	else if (guestCode)
+		DoWriteGuestCode();
 	else
 		DoReflash();
 
