@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 
 #define SYNA_TOOL_BOX
 
@@ -49,6 +49,7 @@
 #define IMAGEBLOCKCOUNT_FILENAME "fwblockcount"
 #define CONFIGBLOCKCOUNT_FILENAME "configblockcount"
 #define PMCONFIGBLOCKCOUNT_FILENAME "permconfigblockcount"
+#define DISPCONFIGBLOCKCOUNT_FILENAME "dispconfigblockcount"
 #define GUESTCODE_FILENAME "writeguestcode"
 #define BUILDID_FILENAME "buildid"
 #define FLASHPROG_FILENAME "flashprog"
@@ -397,6 +398,18 @@ static int ReadPmConfigBlockCount(void)
 	return configBlockCount;
 }
 
+static int ReadDispConfigBlockCount(void)
+{
+	unsigned int configBlockCount;
+	char tmpfname[MAX_STRING_LEN];
+
+	snprintf(tmpfname, MAX_STRING_LEN, "%s/%s", mySensor, DISPCONFIGBLOCKCOUNT_FILENAME);
+
+	ReadValueFromSysfsFile(tmpfname, &configBlockCount);
+
+	return configBlockCount;
+}
+
 static void StartWriteGuestCode(int value)
 {
 	char tmpfname[MAX_STRING_LEN];
@@ -543,6 +556,10 @@ static void DoReadConfig(void)
 	} else if (pmConfig) {
 		SetConfigArea(PERM_CONFIG_AREA);
 		blockCount = ReadPmConfigBlockCount();
+		configSize = blockSize * blockCount;
+	} else if (dpConfig) {
+		SetConfigArea(DISP_CONFIG_AREA);
+		blockCount = ReadDispConfigBlockCount();
 		configSize = blockSize * blockCount;
 	} else {
 		return;
