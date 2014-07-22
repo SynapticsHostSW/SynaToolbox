@@ -83,14 +83,15 @@ Register Access Tool Parameters and Usage
 -----------------------------------------
 Parameters
 [-a {address in hex}] - Start address (16-bit) for reading/writing
-[-l {length to read}] - Length in bytes to read from start address
-[-d {data to write}] - Data (MSB = first byte to write) to write to start address
-[-r] - Read from start address for number of bytes set with -l parameter
-[-w] - Write data set with -d parameter to start address
+[-o {register offset}] - Offset of register from start address to do read/write from
+[-l {length to read}] - Length in bytes to read
+[-d {data to write}] - Data (MSB = first byte to write) to write
+[-r] - Read for number of bytes set with -l parameter
+[-w] - Write data set with -d parameter
 
 Usage examples
-- Read five bytes of data starting from address 0x048a
-   -a 0x048a -l 5 -r
+- Read five bytes of data starting from third register from address 0x048a
+   -a 0x048a -o 3 -l 5 -r
 - Write 0x11 0x22 0x33 to address 0x048a starting with 0x11
    -a 0x048a -d 0x112233 -w
 

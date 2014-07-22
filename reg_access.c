@@ -24,7 +24,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 
 #define SYNA_TOOL_BOX
 
@@ -46,15 +46,17 @@ char rmidev_open[MAX_STRING_LEN];
 char rmidev_data[MAX_STRING_LEN];
 char rmidev_release[MAX_STRING_LEN];
 
+unsigned char *w_data;
 unsigned char *r_data;
 
 unsigned char read_write = 0; /* 0 = read, 1 = write */
 unsigned short address = 0;
 unsigned int length = 1;
+unsigned int offset = 0;
 
 void reg_access_usage(void)
 {
-	printf("\t[-a {address in hex}] [-l {length to read}] [-d {data to write}] [-r] [-w]\n");
+	printf("\t[-a {address in hex}] [-o {offset}] [-l {length to read}] [-d {data to write}] [-r] [-w]\n");
 
 	return;
 }
@@ -62,13 +64,16 @@ void reg_access_usage(void)
 static void usage(char *name)
 {
 	printf("Version %s\n", VERSION);
-	printf("Usage: %s [-a {address in hex}] [-l {length to read}] [-d {data to write}] [-r] [-w]\n", name);
+	printf("Usage: %s [-a {address in hex}] [-o {offset}] [-l {length to read}] [-d {data to write}] [-r] [-w]\n", name);
 
 	return;
 }
 
 static void error_exit(error_code)
 {
+	if (w_data)
+		free(w_data);
+
 	if (r_data)
 		free(r_data);
 
@@ -142,9 +147,8 @@ int main(int argc, char* argv[])
 	int found = 0;
 	int fd;
 	unsigned long temp;
+	unsigned long index;
 	unsigned char bytes_to_write;
-	unsigned char index = 0;
-	unsigned char w_data[MAX_BUFFER_LEN] = {0};
 	char data_input[MAX_STRING_LEN] = {0};
 	char next_value[3] = {0};
 	char *strptr;
@@ -184,10 +188,14 @@ int main(int argc, char* argv[])
 			this_arg++;
 			temp = strtoul(argv[this_arg], NULL, 0);
 			address = (unsigned short)temp;
+		} else if (!strcmp((const char *)argv[this_arg], "-o")) {
+			this_arg++;
+			temp = strtoul(argv[this_arg], NULL, 0);
+			offset = (unsigned int)temp;
 		} else if (!strcmp((const char *)argv[this_arg], "-l")) {
 			this_arg++;
 			temp = strtoul(argv[this_arg], NULL, 0);
-			length = (unsigned short)temp;
+			length = (unsigned int)temp;
 		} else if (!strcmp((const char *)argv[this_arg], "-d")) {
 			this_arg++;
 			memcpy(data_input, argv[this_arg], strlen(argv[this_arg]));
@@ -227,14 +235,6 @@ int main(int argc, char* argv[])
 			error_exit(EIO);
 		}
 
-		fd = open(rmidev_data, O_WRONLY);
-		if (fd < 0) {
-			printf("error: failed to open %s\n", rmidev_data);
-			error_exit(EIO);
-		}
-
-		lseek(fd, address, SEEK_SET);
-
 		strptr = strstr(data_input, "0x");
 		if (!strptr) {
 			strptr = &data_input[0];
@@ -244,7 +244,34 @@ int main(int argc, char* argv[])
 			bytes_to_write = (strlen(data_input) / 2) - 1;
 		}
 
+		w_data = malloc(bytes_to_write + offset);
+		if (!w_data) {
+			printf("error: failed to allocate w_data buffer\n");
+			error_exit(ENOMEM);
+		}
+
+		if (offset) {
+			fd = open(rmidev_data, O_RDONLY);
+
+			if (fd < 0) {
+				printf("error: failed to open %s\n", rmidev_data);
+				error_exit(EIO);
+			}
+
+			lseek(fd, address, SEEK_SET);
+
+			retval = read(fd, w_data, bytes_to_write + offset);
+			if (retval != (bytes_to_write + offset)) {
+				printf("error: failed to read data\n");
+				close(fd);
+				error_exit(EIO);
+			}
+
+			close(fd);
+		}
+
 		temp = bytes_to_write;
+		index = offset;
 		while (temp) {
 			memcpy(next_value, strptr, 2);
 			w_data[index] = (unsigned char)strtoul(next_value, NULL, 16);
@@ -253,8 +280,16 @@ int main(int argc, char* argv[])
 			temp--;
 		}
 
-		retval = write(fd, &w_data, bytes_to_write);
-		if (retval != bytes_to_write) {
+		fd = open(rmidev_data, O_WRONLY);
+		if (fd < 0) {
+			printf("error: failed to open %s\n", rmidev_data);
+			error_exit(EIO);
+		}
+
+		lseek(fd, address, SEEK_SET);
+
+		retval = write(fd, w_data, bytes_to_write + offset);
+		if (retval != (bytes_to_write + offset)) {
 			printf("error: failed to write data\n");
 			close(fd);
 			error_exit(EIO);
@@ -262,7 +297,7 @@ int main(int argc, char* argv[])
 
 		close(fd);
 	} else {
-		r_data = malloc(length);
+		r_data = malloc(length + offset);
 		if (!r_data) {
 			printf("error: failed to allocate r_data buffer\n");
 			error_exit(ENOMEM);
@@ -277,8 +312,8 @@ int main(int argc, char* argv[])
 
 		lseek(fd, address, SEEK_SET);
 
-		retval = read(fd, r_data, length);
-		if (retval != length) {
+		retval = read(fd, r_data, length + offset);
+		if (retval != (length + offset)) {
 			printf("error: failed to read data\n");
 			close(fd);
 			error_exit(EIO);
@@ -286,7 +321,7 @@ int main(int argc, char* argv[])
 
 		close(fd);
 
-		for(temp = 0; temp < length; temp++)
+		for(temp = offset; temp < (length + offset); temp++)
 			printf("data %d = 0x%02x\n", (unsigned int)temp, r_data[temp]);
 	}
 /*
@@ -298,6 +333,9 @@ int main(int argc, char* argv[])
 	writevaluetofd(fd, 1);
 	close(fd);
 */
+	if (w_data)
+		free(w_data);
+
 	if (r_data)
 		free(r_data);
 
