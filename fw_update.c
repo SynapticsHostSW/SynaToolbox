@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#define VERSION "1.6"
+#define VERSION "1.7"
 
 #define SYNA_TOOL_BOX
 
@@ -38,9 +38,12 @@
 #define MAX_STRING_LEN 256
 #define MAX_BUFFER_LEN 256
 
+#define IHEX_LINE_LENGTH 13
+
 #define DATA_FILENAME "data"
 #define IMAGENAME_FILENAME "imagename"
 #define IMAGESIZE_FILENAME "imagesize"
+#define DORECOVERY_FILENAME "dorecovery"
 #define DOREFLASH_FILENAME "doreflash"
 #define CONFIGAREA_FILENAME "configarea"
 #define READCONFIG_FILENAME "readconfig"
@@ -66,6 +69,7 @@
 unsigned char *image_buf = NULL;
 unsigned char *config_buf = NULL;
 int fileSize;
+int recovery = 0;
 int lockdown = 0;
 int readConfig = 0;
 int writeConfig = 0;
@@ -89,8 +93,9 @@ enum update_mode {
 
 void fw_update_usage(void)
 {
-	printf("\t[-b {image_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n");
+	printf("\t[-b {image_file}] [-h {ihex_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n");
 	printf("\t[-b {image_file}] - Name of image file\n");
+	printf("\t[-h {ihex_file}] - Name of iHex file\n");
 	printf("\t[-ld] - Do lockdown\n");
 	printf("\t[-gc] - Write guest code\n");
 	printf("\t[-r] - Read config area\n");
@@ -107,8 +112,9 @@ void fw_update_usage(void)
 static void usage(char *name)
 {
 	printf("Version %s\n", VERSION);
-	printf("Usage: %s [-b {image_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n", name);
+	printf("Usage: %s [-b {image_file}] [-h {ihex_file}] [-ld] [-gc] [-r] [-ui] [-pm] [-bl] [-dp] [-f] [-v]\n", name);
 	printf("\t[-b {image_file}] - Name of image file\n");
+	printf("\t[-h {ihex_file}] - Name of iHex file\n");
 	printf("\t[-ld] - Do lockdown\n");
 	printf("\t[-gc] - Write guest code\n");
 	printf("\t[-r] - Read config area\n");
@@ -145,24 +151,25 @@ static void ConvertToLittleEndian(unsigned char *dest, unsigned long src)
 	return;
 }
 
-static void TimeSubtract(struct timeval *result, struct timeval *x, struct timeval *y)
+static void TimeSubtract(struct timeval *result, struct timeval *end, struct timeval *start)
 {
+	int num_of_usecs;
 	int num_of_secs;
 
-	if (x->tv_usec < y->tv_usec) {
-		num_of_secs = (y->tv_usec - x->tv_usec) / 1000000 + 1;
-		y->tv_usec -= 1000000 * num_of_secs;
-		y->tv_sec += num_of_secs;
+	if (end->tv_sec == start->tv_sec) {
+		result->tv_sec = 0;
+		result->tv_usec = end->tv_usec - start->tv_usec;
+		return;
 	}
 
-	if (x->tv_usec - y->tv_usec > 1000000) {
-		num_of_secs = (x->tv_usec - y->tv_usec) / 1000000;
-		y->tv_usec += 1000000 * num_of_secs;
-		y->tv_sec -= num_of_secs;
-	}
+	num_of_usecs = 1000000 - start->tv_usec + end->tv_usec;
+	num_of_secs = end->tv_sec - start->tv_sec - 1;
 
-	result->tv_sec = x->tv_sec - y->tv_sec;
-	result->tv_usec = x->tv_usec - y->tv_usec;
+	num_of_secs += num_of_usecs / 1000000;
+	num_of_usecs = num_of_usecs % 1000000;
+
+	result->tv_sec = num_of_secs;
+	result->tv_usec = num_of_usecs;
 
 	return;
 }
@@ -300,6 +307,17 @@ static void SetImageSize(int value)
 	char tmpfname[MAX_STRING_LEN];
 
 	snprintf(tmpfname, MAX_STRING_LEN, "%s/%s", mySensor, IMAGESIZE_FILENAME);
+
+	WriteValueToSysfsFile(tmpfname, value);
+
+	return;
+}
+
+static void StartRecovery(int value)
+{
+	char tmpfname[MAX_STRING_LEN];
+
+	snprintf(tmpfname, MAX_STRING_LEN, "%s/%s", mySensor, DORECOVERY_FILENAME);
 
 	WriteValueToSysfsFile(tmpfname, value);
 
@@ -652,6 +670,21 @@ static void DoWriteGuestCode(void)
 	return;
 }
 
+static void DoRecovery(void)
+{
+	int update_mode = NORMAL;
+
+	printf("Starting firmware recovery...\n");
+
+	SetImageSize(fileSize);
+	WriteBinaryData((char *)&image_buf[0], fileSize);
+	StartRecovery(update_mode);
+
+	printf("Firmware recovery finished...\n");
+
+	return;
+}
+
 static void DoReflash(void)
 {
 	int update_mode = NORMAL;
@@ -674,6 +707,52 @@ static void DoReflash(void)
 
 exit:
 	printf("Firmware update finished...\n");
+
+	return;
+}
+
+static void InitiHexFile(void)
+{
+	char line_buf[IHEX_LINE_LENGTH + 2];
+	int data0;
+	int data1;
+	int index = 0;
+	int numBytesRead;
+	FILE *fp;
+
+	if (strlen(imageFileName)) {
+		fp = fopen(imageFileName, "r");
+		if (!fp) {
+			printf("ERROR: image file %s not found\n", imageFileName);
+			error_exit(EINVAL);
+		}
+
+		fseek(fp, -IHEX_LINE_LENGTH, SEEK_END);
+		numBytesRead = fread(line_buf, 1, IHEX_LINE_LENGTH, fp);
+		if (numBytesRead != IHEX_LINE_LENGTH) {
+			printf("ERROR: failed to read last line of iHex file\n");
+			fclose(fp);
+			error_exit(EINVAL);
+		}
+
+		sscanf(line_buf, "%*c%*2x%4x", &fileSize);
+		fileSize += 2;
+
+		fseek(fp, 0L, SEEK_SET);
+		image_buf = malloc(fileSize + 1);
+		if (!image_buf) {
+			printf("ERROR: failed to allocate memory for image buffer\n");
+			fclose(fp);
+			error_exit(ENOMEM);
+		} else {
+			while (fgets(line_buf, sizeof(line_buf), fp) != NULL) {
+				sscanf(line_buf, "%*c%*8x%2x%2x", &data0, &data1);
+				image_buf[index++] = (unsigned char)data0;
+				image_buf[index++] = (unsigned char)data1;
+			}
+		}
+		fclose(fp);
+	}
 
 	return;
 }
@@ -787,6 +866,22 @@ int main(int argc, char* argv[])
 			}
 			close(fd);
 			strncpy(imageFileName, argv[this_arg], MAX_STRING_LEN);
+		} else if (!strcmp((const char *)argv[this_arg], "-h")) {
+			/* iHex file */
+			this_arg++;
+			if (this_arg >= argc) {
+				printf("ERROR: iHex file missing\n");
+				error_exit(EINVAL);
+			}
+			/* Check for presence of iHex file */
+			fd = open(argv[this_arg], O_RDONLY);
+			if (fd < 0) {
+				printf("ERROR: iHex file %s not found\n", argv[this_arg]);
+				error_exit(EINVAL);
+			}
+			close(fd);
+			strncpy(imageFileName, argv[this_arg], MAX_STRING_LEN);
+			recovery = 1;
 		} else if (!strcmp((const char *)argv[this_arg], "-ld")) {
 			lockdown = 1;
 		} else if (!strcmp((const char *)argv[this_arg], "-r")) {
@@ -835,7 +930,10 @@ int main(int argc, char* argv[])
 		error_exit(EINVAL);
 	}
 
-	InitImageFile();
+	if (recovery)
+		InitiHexFile();
+	else
+		InitImageFile();
 
 	retval = gettimeofday(&start_time, NULL);
 	if (retval < 0)
@@ -847,7 +945,9 @@ int main(int argc, char* argv[])
 			printf("Image file: %s\n", imageFileName);
 	}
 
-	if (readConfig)
+	if (recovery)
+		DoRecovery();
+	else if (readConfig)
 		DoReadConfig();
 	else if (writeConfig)
 		DoWriteConfig();

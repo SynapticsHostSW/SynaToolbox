@@ -25,6 +25,7 @@ Firmware Update Tool Parameters and Usage
 -----------------------------------------
 Parameters
 [-b {image_file}] - Name of image file
+[-h {ihex_file}] - Name of iHex file
 [-ld] - Do lockdown
 [-gc] - Write guest code
 [-r] - Read config area
@@ -50,6 +51,8 @@ Usage examples
    -r -ui
 - Read permanent config area
    -r -pm
+- Perform microbootloader mode recovery using PR1234567.iHex.hex
+   -h PR1234567.iHex.hex
 
 Procedures for checking whether to proceed with reflash
 - If [-f] flag is set, proceed with reflash.
