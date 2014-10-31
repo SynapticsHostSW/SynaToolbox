@@ -22,7 +22,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define VERSION "1.6"
+#define VERSION "1.7"
 
 #define INPUT_PATH "/sys/class/input/input"
 #define NUMBER_OF_INPUTS_TO_SCAN 20

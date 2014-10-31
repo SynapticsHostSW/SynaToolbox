@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#define VERSION "1.7"
+#define VERSION "1.8"
 
 #define SYNA_TOOL_BOX
 
@@ -714,9 +714,11 @@ exit:
 static void InitiHexFile(void)
 {
 	char line_buf[IHEX_LINE_LENGTH + 2];
+	int type;
 	int data0;
 	int data1;
 	int index = 0;
+	int num_of_lines = 0;
 	int numBytesRead;
 	FILE *fp;
 
@@ -727,30 +729,28 @@ static void InitiHexFile(void)
 			error_exit(EINVAL);
 		}
 
-		fseek(fp, -IHEX_LINE_LENGTH, SEEK_END);
-		numBytesRead = fread(line_buf, 1, IHEX_LINE_LENGTH, fp);
-		if (numBytesRead != IHEX_LINE_LENGTH) {
-			printf("ERROR: failed to read last line of iHex file\n");
-			fclose(fp);
-			error_exit(EINVAL);
-		}
-
-		sscanf(line_buf, "%*c%*2x%4x", &fileSize);
-		fileSize += 2;
-
 		fseek(fp, 0L, SEEK_SET);
-		image_buf = malloc(fileSize + 1);
+		while (fgets(line_buf, sizeof(line_buf), fp) != NULL)
+			num_of_lines++;
+
+		image_buf = malloc(num_of_lines * 2 + 1);
 		if (!image_buf) {
 			printf("ERROR: failed to allocate memory for image buffer\n");
 			fclose(fp);
 			error_exit(ENOMEM);
-		} else {
-			while (fgets(line_buf, sizeof(line_buf), fp) != NULL) {
-				sscanf(line_buf, "%*c%*8x%2x%2x", &data0, &data1);
+		}
+
+		fseek(fp, 0L, SEEK_SET);
+		while (fgets(line_buf, sizeof(line_buf), fp) != NULL) {
+			sscanf(line_buf, "%*c%*6x%2x%2x%2x", &type, &data0, &data1);
+			if (type == 0x00) {
 				image_buf[index++] = (unsigned char)data0;
 				image_buf[index++] = (unsigned char)data1;
 			}
 		}
+
+		fileSize = index;
+
 		fclose(fp);
 	}
 
