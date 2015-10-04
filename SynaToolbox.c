@@ -54,7 +54,7 @@ enum tool {
 	BACKDOOR_ACCESS = 0x81,
 };
 
-static void error_exit(error_code)
+static void error_exit(int error_code)
 {
 	exit(-error_code);
 

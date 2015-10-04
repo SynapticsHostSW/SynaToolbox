@@ -140,7 +140,7 @@ static void open_all_fds(void)
 	return;
 }
 
-static void error_exit(error_code)
+static void error_exit(int error_code)
 {
 	close_all_fds();
 	if (r_data)

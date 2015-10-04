@@ -103,7 +103,7 @@ static void usage(char *name)
 	return;
 }
 
-static void error_exit(error_code)
+static void error_exit(int error_code)
 {
 	if (data_buffer)
 		free(data_buffer);
@@ -341,10 +341,10 @@ int main(int argc, char* argv[])
 	int reading;;
 	int cartesian = 0;
 	int patience = PATIENCE;
-	int report_type;
+	int report_type = -1;
 	int report_size;
-	int rx_num;
-	int tx_num;
+	int rx_num = 0;
+	int tx_num = 0;
 	char *report_data_8;
 	short *report_data_16;
 	int *report_data_32;
