@@ -69,7 +69,7 @@ static void usage(char *name)
 	return;
 }
 
-static void error_exit(error_code)
+static void error_exit(int error_code)
 {
 	if (w_data)
 		free(w_data);
